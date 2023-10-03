@@ -100,7 +100,8 @@ class MAF():
             d = np.hstack([d, bs])
             data.append(d)
         self.data = np.concatenate(data)
-        
+        print(self.data)
+        sys.exit(1) 
 
         self.theta = tf.convert_to_tensor(self.data[:, :-2], dtype=tf.float32)
         self.sample_weights = tf.convert_to_tensor(self.data[:, -2:], dtype=tf.float32)
