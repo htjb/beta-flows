@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow_probability import (bijectors as tfb, distributions as tfd)
-from beta_flow.processing import (_forward_transform, _inverse_transform)
-from beta_flow.processing import pure_tf_train_test_split
+from margarine.processing import (_forward_transform, _inverse_transform)
+from margarine.processing import pure_tf_train_test_split
 from scipy.special import logsumexp
 import numpy as np
 import tqdm
