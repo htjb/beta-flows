@@ -17,18 +17,25 @@ def prior(cube):
     theta[1] = UniformPrior(0, 3)(cube[1])
     return theta
 
-def likelihood(theta):
+"""def likelihood(theta):
     parameters = theta.copy()
     noise=0.1
     loglikelihood = (-0.5*np.log(2*np.pi*(noise**2))-0.5 \
         *((y - [parameters[0]*parameters[1]**2,
                  parameters[1]/2]) / noise)**2).sum()
+    return loglikelihood, 0"""
+
+def likelihood(theta):
+    parameters = theta.copy()
+    noise=0.1
+    loglikelihood = (-0.5*np.log(2*np.pi*(noise**2))-0.5 \
+        *((y - parameters) / noise)**2).sum()
     return loglikelihood, 0
 
 nDims = 2
 
 settings = PolyChordSettings(nDims, 0) #settings is an object
-settings.base_dir = 'ns_run/' #string
+settings.base_dir = 'gauss_ns_run/' #string
 settings.read_resume = False
 
 output = pypolychord.run_polychord(likelihood, nDims, 0, settings, prior)
@@ -37,9 +44,9 @@ output.make_paramnames_files(paramnames)
 
 from anesthetic import read_chains
 
-samples = read_chains('ns_run/test')
+samples = read_chains('gauss_ns_run/test')
 print(samples)
 names = ['p0', 'p1']
 axes = samples.plot_2d(names)
-plt.savefig('ns_run.png')
+plt.savefig('gauss_ns_run.png')
 plt.show()

@@ -88,22 +88,23 @@ class MAF():
         self.parameters = kwargs.pop('parameters', theta.columns[:-3].values)
         
         self.beta = kwargs.pop('beta', np.linspace(0, 1, 10))
-
+        
+        # makes a stacked list of [parametes, weights, beta]
         data = []
         for b in self.beta:
             theta_b = theta.set_beta(b)
             weights = theta_b.get_weights()
+            weights /= np.sum(weights)
             t = theta_b[self.parameters].values
-            print(t.shape, weights.shape)
             d = np.hstack([t, weights[:, np.newaxis]])
             bs = np.tile(b, (len(d), 1))
             d = np.hstack([d, bs])
             data.append(d)
         self.data = np.concatenate(data)
-        print(self.data)
-        sys.exit(1) 
 
+        # theta is the parameter values
         self.theta = tf.convert_to_tensor(self.data[:, :-2], dtype=tf.float32)
+        # sample_weights is the weights and beta
         self.sample_weights = tf.convert_to_tensor(self.data[:, -2:], dtype=tf.float32)
         
         mask = np.isfinite(self.theta).all(axis=-1)
@@ -112,9 +113,11 @@ class MAF():
                                               self.sample_weights,
                                               mask, axis=0)
 
+        # effective number of samples
         self.n = tf.math.reduce_sum(self.sample_weights)**2 / \
             tf.math.reduce_sum(self.sample_weights**2)
 
+        # approximate the bounds of the distribution
         theta_max = tf.math.reduce_max(self.theta, axis=0)
         theta_min = tf.math.reduce_min(self.theta, axis=0)
         a = ((self.n-2)*theta_max-theta_min)/(self.n-3)
@@ -122,6 +125,7 @@ class MAF():
         self.theta_min = kwargs.pop('theta_min', b)
         self.theta_max = kwargs.pop('theta_max', a)
 
+        # kwarg checks
         if type(self.number_networks) is not int:
             raise TypeError("'number_networks' must be an integer.")
         if not isinstance(self.learning_rate,
@@ -138,6 +142,7 @@ class MAF():
                         "One or more valus in 'hidden_layers'" +
                         "is not an integer.")
 
+        # set the optimizer
         self.optimizer = tf.keras.optimizers.legacy.Adam(
                 learning_rate=self.learning_rate)
 
@@ -218,12 +223,6 @@ class MAF():
 
         phi = _forward_transform(theta, theta_min, theta_max)
 
-        blank = tf.Variable(tf.zeros(phi.shape, tf.float32))
-
-        intermediate_w = sample_weights[:, 0]/tf.reduce_sum(sample_weights[:, 0])
-        blank = blank[:, 0].assign(intermediate_w)
-        sample_weights = blank[:, 1].assign(sample_weights[:, 1])
-
         phi_train, phi_test, weights_phi_train, weights_phi_test = \
             pure_tf_train_test_split(phi, sample_weights, test_size=0.2)
 
@@ -266,11 +265,14 @@ class MAF():
         This function is used to calculate the test loss value at each epoch
         for early stopping.
         """
-
+        shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
+        scaled_maf = tfd.TransformedDistribution(maf,
+                bijector=tfb.Scale(shifter))
+        
         if loss_type == 'sum':
-            loss = -tf.reduce_sum(w[:, 0]*w[:, 1]*maf.log_prob(x))
+            loss = -tf.reduce_sum(w[:, 0]*scaled_maf.log_prob(x))
         elif loss_type == 'mean':
-            loss = -tf.reduce_mean(w[:, 0]*w[:, 1]*maf.log_prob(x))
+            loss = -tf.reduce_mean(w[:, 0]*scaled_maf.log_prob(x))
         return loss
 
     @tf.function(jit_compile=True)
@@ -281,12 +283,14 @@ class MAF():
         adjust the weights and biases of the neural networks via the
         optimizer algorithm.
         """
-
         with tf.GradientTape() as tape:
+            shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
+            scaled_maf = tfd.TransformedDistribution(maf,
+                    bijector=tfb.Scale(shifter))
             if loss_type == 'sum':
-                loss = -tf.reduce_sum(w[:, 0]*w[:, 1]*maf.log_prob(x))
+                loss = -tf.reduce_sum(w[:, 0]*scaled_maf.log_prob(x))
             elif loss_type == 'mean':
-                loss = -tf.reduce_mean(w[:, 0]*w[:, 1]*maf.log_prob(x))
+                loss = -tf.reduce_mean(w[:, 0]*scaled_maf.log_prob(x))
         gradients = tape.gradient(loss, maf.trainable_variables)
         self.optimizer.apply_gradients(
             zip(gradients,
@@ -312,14 +316,7 @@ class MAF():
         x = self.bij(x)
         x = _inverse_transform(x, self.theta_min, self.theta_max)
 
-        lp = self.log_prob(x, beta)
-
-        lpold = lp/beta
-
-        lpold = lpold - logsumexp(lpold)
-        lp = lp - logsumexp(lp)
-
-        return x, np.exp(lp - lpold)
+        return x*1/np.sqrt(beta)
 
     #@tf.function(jit_compile=True)
     def sample(self, length=1000, beta=1):
@@ -375,13 +372,17 @@ class MAF():
             transform_chain = tfb.Chain([
                 tfb.Invert(tfb.NormalCDF()),
                 tfb.Scale(1/(maxs - mins)), tfb.Shift(-mins)])
-
+            
             correction = norm_jac(transformed_x)
-            logprob = beta*(maf.log_prob(transformed_x) -
+            logprob = (maf.log_prob(transformed_x) -
                        tf.reduce_sum(correction, axis=-1))
             return logprob
+        
+        shifter = tf.transpose([1/tf.math.sqrt(beta)]*self.theta.shape[-1])
+        scaled_maf = tfd.TransformedDistribution(self.maf,
+                bijector=tfb.Scale(shifter))
 
-        logprob = calc_log_prob(self.theta_min, self.theta_max, self.maf)
+        logprob = calc_log_prob(self.theta_min, self.theta_max, scaled_maf)
 
         return logprob
 
