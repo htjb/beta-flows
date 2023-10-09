@@ -8,7 +8,7 @@ file = 'gauss_ns_run'
 samples = read_chains(file + '/test')
 beta = [0.001, 0.25, 1.]
 # train the flow
-f = MAF(samples, beta=beta, hidden_layers=[50, 50], number_networks=20, lr=5e-3)
+f = MAF(samples, beta=beta, hidden_layers=[50, 50])
 f.train(10000, early_stop=True)
 
 plt.plot(f.loss_history)
