@@ -266,13 +266,13 @@ class MAF():
         for early stopping.
         """
         shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
-        scaled_maf = tfd.TransformedDistribution(maf,
-                bijector=tfb.Scale(shifter))
+        scaled_maf = tfb.Chain([tfb.Scale(shifter)])
+        correction = scaled_maf.forward_log_det_jacobian(x, event_ndims=0)
         
         if loss_type == 'sum':
-            loss = -tf.reduce_sum(w[:, 0]*scaled_maf.log_prob(x))
+            loss = -tf.reduce_sum(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
         elif loss_type == 'mean':
-            loss = -tf.reduce_mean(w[:, 0]*scaled_maf.log_prob(x))
+            loss = -tf.reduce_mean(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
         return loss
 
     @tf.function(jit_compile=True)
@@ -285,12 +285,12 @@ class MAF():
         """
         with tf.GradientTape() as tape:
             shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
-            scaled_maf = tfd.TransformedDistribution(maf,
-                    bijector=tfb.Scale(shifter))
+            scaled_maf = tfb.Chain([tfb.Scale(shifter)])
+            correction = scaled_maf.forward_log_det_jacobian(x, event_ndims=0)
             if loss_type == 'sum':
-                loss = -tf.reduce_sum(w[:, 0]*scaled_maf.log_prob(x))
+                loss = -tf.reduce_sum(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
             elif loss_type == 'mean':
-                loss = -tf.reduce_mean(w[:, 0]*scaled_maf.log_prob(x))
+                loss = -tf.reduce_mean(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
         gradients = tape.gradient(loss, maf.trainable_variables)
         self.optimizer.apply_gradients(
             zip(gradients,
@@ -374,15 +374,17 @@ class MAF():
                 tfb.Scale(1/(maxs - mins)), tfb.Shift(-mins)])
             
             correction = norm_jac(transformed_x)
-            logprob = (maf.log_prob(transformed_x) -
-                       tf.reduce_sum(correction, axis=-1))
+            beta_correction = scaled_maf.inverse_log_det_jacobian(transformed_x, event_ndims=0)
+
+            logprob = (maf.log_prob(transformed_x) - 
+                       tf.reduce_sum(correction, axis=-1) + 
+                       tf.reduce_sum(beta_correction, axis=-1))
             return logprob
         
         shifter = tf.transpose([1/tf.math.sqrt(beta)]*self.theta.shape[-1])
-        scaled_maf = tfd.TransformedDistribution(self.maf,
-                bijector=tfb.Scale(shifter))
+        scaled_maf = tfb.Chain([tfb.Scale(shifter)])
 
-        logprob = calc_log_prob(self.theta_min, self.theta_max, scaled_maf)
+        logprob = calc_log_prob(self.theta_min, self.theta_max, self.maf)
 
         return logprob
 

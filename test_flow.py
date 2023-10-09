@@ -4,9 +4,9 @@ from beta_flow.flow import MAF
 import matplotlib.pyplot as plt
 
 # load the test samples in
-file = 'gauss_ns_run'
+file = 'ns_run'
 samples = read_chains(file + '/test')
-beta = [0.001, 0.25, 1.]
+beta = [0.001, 0.1, 0.25, 0.75, 1.]
 # train the flow
 f = MAF(samples, beta=beta, hidden_layers=[50, 50])
 f.train(10000, early_stop=True)
@@ -21,7 +21,7 @@ y = np.linspace(samples['p1'].min(), samples['p1'].max(), 100).astype(np.float32
 xv, yv = np.meshgrid(x, y, indexing='ij')
 plotting_order = np.array([xv.flatten(), yv.flatten()]).T
 
-fig, axes = plt.subplots(3, 3, figsize=(10, 5))
+fig, axes = plt.subplots(3, len(beta), figsize=(10, 5))
 
 for i, b in enumerate(beta[::-1]):
     # plot the actual samples for different betas
