@@ -1,0 +1,8 @@
+matplotlib
+numpy
+scipy
+tensorflow
+anesthetic
+margarine
+scipy
+tqdm
