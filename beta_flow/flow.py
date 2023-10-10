@@ -1,8 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow_probability import (bijectors as tfb, distributions as tfd)
-from margarine.processing import (_forward_transform, _inverse_transform)
-from margarine.processing import pure_tf_train_test_split
+from margarine.processing import pure_tf_train_test_split, _forward_transform
 from scipy.special import logsumexp
 import numpy as np
 import tqdm
@@ -87,7 +86,7 @@ class MAF():
         self.hidden_layers = kwargs.pop('hidden_layers', [50, 50])
         self.parameters = kwargs.pop('parameters', theta.columns[:-3].values)
         
-        self.beta = kwargs.pop('beta', np.linspace(0, 1, 10))
+        self.beta = kwargs.pop('beta', np.logspace(-4, 0, 10))
         
         # makes a stacked list of [parametes, weights, beta]
         data = []
@@ -158,7 +157,14 @@ class MAF():
                       for _ in range(self.number_networks)]
 
         self.bij = tfb.Chain([
-            tfb.MaskedAutoregressiveFlow(made) for made in self.mades])
+                              tfb.Shift(self.theta_min), 
+                              tfb.Scale(self.theta_max-self.theta_min), 
+                               tfb.NormalCDF(),
+            *[tfb.MaskedAutoregressiveFlow(made) for made in self.mades],  
+                                #tfb.Invert(tfb.NormalCDF()),
+                                #tfb.Scale(1./(self.theta_max - self.theta_min)), 
+                                #tfb.Shift(-self.theta_min)
+                                ])
 
         self.base = tfd.Blockwise(
             [tfd.Normal(loc=0, scale=1)
@@ -221,10 +227,10 @@ class MAF():
 
         """Training the masked autoregressive flow."""
 
-        phi = _forward_transform(theta, theta_min, theta_max)
+        #phi = _forward_transform(theta, theta_min, theta_max)
 
         phi_train, phi_test, weights_phi_train, weights_phi_test = \
-            pure_tf_train_test_split(phi, sample_weights, test_size=0.33)
+            pure_tf_train_test_split(theta, sample_weights, test_size=0.3)
 
         self.loss_history = []
         self.test_loss_history = []
@@ -258,21 +264,23 @@ class MAF():
                         return minimum_model
         return maf
 
-    @tf.function(jit_compile=True)
+    #@tf.function(jit_compile=True)
     def _test_step(self, x, w, loss_type, maf):
 
         r"""
         This function is used to calculate the test loss value at each epoch
         for early stopping.
         """
-        shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
-        scaled_maf = tfb.Chain([tfb.Scale(shifter)])
-        correction = scaled_maf.forward_log_det_jacobian(x, event_ndims=0)
+        """shift = tf.transpose(tf.convert_to_tensor([tf.math.sqrt(w[:, 1])]*x.shape[-1]))
+        x = tfb.Scale(shift).forward(x)"""
         
+        """print(x)
+        print(maf.log_prob(x))
+        print(scaled_maf.log_prob(x))"""
         if loss_type == 'sum':
-            loss = -tf.reduce_sum(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
+            loss = -tf.reduce_sum(w[:, 0]*maf.log_prob(x))# + w[:, 1]*tf.math.log(tf.math.sqrt(w[:, 1])))
         elif loss_type == 'mean':
-            loss = -tf.reduce_mean(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
+            loss = -tf.reduce_mean(w[:, 0]*maf.log_prob(x))# + w[:, 1]*tf.math.log(tf.math.sqrt(w[:, 1])))
         return loss
 
     @tf.function(jit_compile=True)
@@ -283,14 +291,13 @@ class MAF():
         adjust the weights and biases of the neural networks via the
         optimizer algorithm.
         """
+
+        
         with tf.GradientTape() as tape:
-            shifter = tf.transpose([1/tf.math.sqrt(w[:, 1])]*self.theta.shape[-1])
-            scaled_maf = tfb.Chain([tfb.Scale(shifter)])
-            correction = scaled_maf.forward_log_det_jacobian(x, event_ndims=0)
             if loss_type == 'sum':
-                loss = -tf.reduce_sum(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
+                loss = -tf.reduce_sum(w[:, 0]*maf.log_prob(x))#+ w[:, 1]*tf.math.log(tf.math.sqrt(w[:, 1])))
             elif loss_type == 'mean':
-                loss = -tf.reduce_mean(w[:, 0]*(maf.log_prob(x) + tf.reduce_sum(correction, axis=-1)))
+                loss = -tf.reduce_mean(w[:, 0]*maf.log_prob(x))#+ w[:, 1]*tf.math.log(tf.math.sqrt(w[:, 1])))
         gradients = tape.gradient(loss, maf.trainable_variables)
         self.optimizer.apply_gradients(
             zip(gradients,
@@ -312,12 +319,18 @@ class MAF():
         """
         u = tf.cast(u, dtype=tf.float32)
 
-        b = tfb.Chain([self.bij, 
-            tfb.Invert(tfb.Scale([tf.math.sqrt(beta)]*self.theta.shape[-1]))])
+        #b = tfb.Chain([self.bij, 
+        #    tfb.Invert(tfb.Scale([tf.math.sqrt(beta)]*self.theta.shape[-1]))])
+
+        """bij = tfb.Chain([tfb.Scale(1/tf.math.sqrt(beta)),
+                                  tfb.Shift(self.theta_min), 
+                                  tfb.Scale(self.theta_max-self.theta_min), 
+                                  tfb.NormalCDF(), *self.bij.bijectors,
+                                  tfb.Invert(tfb.NormalCDF())])"""
         
-        x = _forward_transform(u)
-        x = b(x)
-        x = _inverse_transform(x, self.theta_min, self.theta_max)
+        #self.bij = tfb.Chain([tfb.Scale(1/tf.math.sqrt(beta)), *self.bij.bijectors])
+        u = _forward_transform(u)
+        x = self.bij.forward(u)
         
         return x
 
@@ -362,32 +375,14 @@ class MAF():
 
         """
 
-        def calc_log_prob(mins, maxs, maf):
+        post_process = tfb.Chain([tfb.Scale(1/tf.math.sqrt(beta)),
+                                  tfb.Shift(self.theta_min), 
+                                  tfb.Scale(self.theta_max-self.theta_min), 
+                                  tfb.NormalCDF()])
 
-            """Function to calculate log-probability for a given MAF."""
+        correction = post_process.forward_log_det_jacobian(params)
 
-            def norm_jac(y):
-                return transform_chain.inverse_log_det_jacobian(
-                    y, event_ndims=0)
-
-            transformed_x = _forward_transform(params, mins, maxs)
-
-            transform_chain = tfb.Chain([
-                tfb.Invert(tfb.NormalCDF()),
-                tfb.Scale(1/(maxs - mins)), tfb.Shift(-mins)])
-            
-            correction = norm_jac(transformed_x)
-            beta_correction = scaled_maf.inverse_log_det_jacobian(transformed_x, event_ndims=0)
-
-            logprob = (maf.log_prob(transformed_x) - 
-                       tf.reduce_sum(correction, axis=-1) + 
-                       tf.reduce_sum(beta_correction, axis=-1))
-            return logprob
-
-        shifter = tf.transpose([1/tf.math.sqrt(beta)]*self.theta.shape[-1])
-        scaled_maf = tfb.Chain([tfb.Scale(shifter)])
-
-        logprob = calc_log_prob(self.theta_min, self.theta_max, self.maf)
+        logprob = (self.maf.log_prob(params) - tf.reduce_sum(correction, axis=-1))
 
         return logprob
 
