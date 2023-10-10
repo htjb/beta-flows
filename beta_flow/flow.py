@@ -224,7 +224,7 @@ class MAF():
         phi = _forward_transform(theta, theta_min, theta_max)
 
         phi_train, phi_test, weights_phi_train, weights_phi_test = \
-            pure_tf_train_test_split(phi, sample_weights, test_size=0.2)
+            pure_tf_train_test_split(phi, sample_weights, test_size=0.33)
 
         self.loss_history = []
         self.test_loss_history = []
@@ -312,11 +312,14 @@ class MAF():
         """
         u = tf.cast(u, dtype=tf.float32)
 
+        b = tfb.Chain([self.bij, 
+            tfb.Invert(tfb.Scale([tf.math.sqrt(beta)]*self.theta.shape[-1]))])
+        
         x = _forward_transform(u)
-        x = self.bij(x)
+        x = b(x)
         x = _inverse_transform(x, self.theta_min, self.theta_max)
-
-        return x*1/np.sqrt(beta)
+        
+        return x
 
     #@tf.function(jit_compile=True)
     def sample(self, length=1000, beta=1):
@@ -380,7 +383,7 @@ class MAF():
                        tf.reduce_sum(correction, axis=-1) + 
                        tf.reduce_sum(beta_correction, axis=-1))
             return logprob
-        
+
         shifter = tf.transpose([1/tf.math.sqrt(beta)]*self.theta.shape[-1])
         scaled_maf = tfb.Chain([tfb.Scale(shifter)])
 
