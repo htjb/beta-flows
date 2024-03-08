@@ -14,9 +14,9 @@ tfpl = tfp.layers
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-nbeta_samples = 50
+nbeta_samples = 200
 LOAD = False
-NUMBER_NETS = 4
+NUMBER_NETS = 2
 HIDDEN_LAYERS = [50]
 
 base_dir = 'ns_run/'
@@ -48,7 +48,7 @@ import random
 theta, sample_weights, beta_values = [], [], []
 for i,b in enumerate(beta):
     s = ns.set_beta(b)
-    #idx = random.sample(range(len(s.values)), 100)
+    idx = random.sample(range(len(s.values)), 50)
     idx = np.arange(len(s.values))
     theta.append(s.values[:, :2][idx])
     sample_weights.append(s.get_weights()[idx])
@@ -128,6 +128,8 @@ posterior_probs = posterior_probs.values[mask]
 
 print('Normal Flow Average Like: ', np.average(nflp, weights=weights))
 print('CNF Average Like: ', np.average(cnflp, weights=weights))
+print('NF Difference: ', logsumexp(posterior_probs, -nflp))
+print('CNF Difference: ', logsumexp(posterior_probs, -cnflp))
 
 fig, axes = plt.subplots(1, 3, figsize=(6.3, 3))
 
