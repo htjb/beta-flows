@@ -7,30 +7,25 @@ from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
 from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
 
-# define tensorflow stuff
-tfk = tf.keras
-tfkl = tf.keras.layers
-tfpl = tfp.layers
-tfd = tfp.distributions
-tfb = tfp.bijectors
-
-nbeta_samples = 200
+nbeta_samples = 25
 LOAD = False
-NUMBER_NETS = 2
+NUMBER_NETS = 5
 HIDDEN_LAYERS = [50]
+ndims = 2
 
-base_dir = 'ns_run/'
-
+base_dir = 'rosenbrock/'
 ns = read_chains(base_dir + 'test')
 
-prior_bounds = approx_uniform_prior_bounds(ns, 2)
+
+prior_bounds = approx_uniform_prior_bounds(ns, ndims)
 print(prior_bounds)
 bounds = []
-for i in range(2):
+for i in range(ndims):
     bounds.append([round(prior_bounds[0][i], 1), round(prior_bounds[1][i], 1)])
 bounds = np.array(bounds)
 print(bounds)
 prior_log_prob = np.log(np.prod((1/(bounds[:, 1] - bounds[:, 0]))))
+
 
 # beta schedule
 beta = get_beta_schedule(ns, nbeta_samples)
@@ -48,9 +43,9 @@ import random
 theta, sample_weights, beta_values = [], [], []
 for i,b in enumerate(beta):
     s = ns.set_beta(b)
-    idx = random.sample(range(len(s.values)), 50)
+    #idx = random.sample(range(len(s.values)), 100)
     idx = np.arange(len(s.values))
-    theta.append(s.values[:, :2][idx])
+    theta.append(s.values[:, :ndims][idx])
     sample_weights.append(s.get_weights()[idx])
     beta_values.append([b]*len(idx))
 theta = np.concatenate(theta).astype(np.float32)
@@ -84,8 +79,8 @@ for i in range(len(test_beta)):
 
 ax = axes.flatten()
 for i in range(len(ax)):
-    ax[i].set_xlim([0, 2])
-    ax[i].set_ylim([0, 2])
+    #ax[i].set_xlim([0, 2])
+    #ax[i].set_ylim([0, 2])
     ax[i].set_xlabel(r'$\theta_1$')
 ax[0].set_ylabel('Truth\n' + r'$\theta_2$')
 ax[5].set_ylabel('Flow\n' + r'$\theta_2$')
@@ -99,10 +94,11 @@ plt.show()
 
 from margarine.maf import MAF
 
-values = ns.values[:, :2]
-mask = np.isfinite(values[:, 0]) & np.isfinite(values[:, 1])
+values = ns.values[:, :ndims]
+"""mask = np.isfinite(values[:, 0]) & np.isfinite(values[:, 1])
 values = values[mask]
-weights = ns.get_weights()[mask]
+weights = ns.get_weights()[mask]"""
+weights = ns.get_weights()
 
 if LOAD:
     flow = MAF.load(base_dir + 'normal_flow.pkl')
@@ -122,16 +118,21 @@ else:
 nflp = flow.log_prob(values).numpy()
 cnflp = bflow.log_prob(values, 1)
 
+mask = np.isfinite(nflp) & np.isfinite(cnflp)
+nflp = nflp[mask]
+cnflp = cnflp[mask]
+weights = weights[mask]
+
 from scipy.special import logsumexp
 posterior_probs = ns['logL'] + prior_log_prob - ns.stats(1000)['logZ'].mean()
 posterior_probs = posterior_probs.values[mask]
 
 print('Normal Flow Average Like: ', np.average(nflp, weights=weights))
 print('CNF Average Like: ', np.average(cnflp, weights=weights))
-print('NF Difference: ', logsumexp(posterior_probs, -nflp))
-print('CNF Difference: ', logsumexp(posterior_probs, -cnflp))
+print('NF Difference: ', np.mean(np.abs(posterior_probs - nflp)))
+print('CNF Difference: ', np.mean(np.abs(posterior_probs - cnflp)))
 
-fig, axes = plt.subplots(1, 3, figsize=(6.3, 3))
+fig, axes = plt.subplots(1, 2, figsize=(6.3, 3))
 
 axes[0].scatter(posterior_probs, nflp, marker='+', c=posterior_probs, cmap='viridis_r')
 axes[1].scatter(posterior_probs, cnflp, marker='*', c=posterior_probs, cmap='viridis_r')
@@ -142,12 +143,12 @@ for i in range(2):
     axes[i].set_ylabel('Flow log-posterior')
     axes[i].legend()
        
-axes[2].scatter(values[:, 0], values[:, 1], c=posterior_probs, cmap='viridis_r', marker='.')
+"""axes[2].scatter(values[:, 0], values[:, 1], c=posterior_probs, cmap='viridis_r', marker='.')
 axes[2].set_title('Samples')
 axes[2].set_xlabel(r'$\theta_1$')
 axes[2].set_ylabel(r'$\theta_2$')
 axes[0].set_title('Normal margarine')
-axes[1].set_title('beta flow')
+axes[1].set_title('beta flow')"""
 plt.tight_layout()
 plt.savefig(base_dir + 'likleihood_comparison.png', dpi=300)
 plt.show()
