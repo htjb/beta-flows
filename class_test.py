@@ -1,13 +1,11 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
-from margarine.processing import (_forward_transform, _inverse_transform,
-                                  pure_tf_train_test_split)
 from anesthetic.plot import kde_contour_plot_2d
 import numpy as np
 import matplotlib.pyplot as plt
 from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
-from betaflows.utils import get_beta_schedule
+from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
 
 # define tensorflow stuff
 tfk = tf.keras
@@ -16,12 +14,22 @@ tfpl = tfp.layers
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-nbeta_samples = 20
+nbeta_samples = 25
 LOAD = False
+NUMBER_NETS = 4
 
 base_dir = 'ns_run/'
 
 ns = read_chains(base_dir + 'test')
+
+prior_bounds = approx_uniform_prior_bounds(ns, 2)
+print(prior_bounds)
+bounds = []
+for i in range(2):
+    bounds.append([round(prior_bounds[0][i], 1), round(prior_bounds[1][i], 1)])
+bounds = np.array(bounds)
+print(bounds)
+prior_log_prob = np.log(1/np.prod(bounds[:, 1] - bounds[:, 0]))
 
 # beta schedule
 beta = get_beta_schedule(ns, nbeta_samples)
@@ -37,15 +45,12 @@ theta = np.concatenate(theta).astype(np.float32)
 sample_weights = np.concatenate(sample_weights).astype(np.float32)
 conditional = np.concatenate(beta_values).astype(np.float32)
 
-theta_min = np.min(theta, axis=0)
-theta_max = np.max(theta, axis=0)
-
 if LOAD:
     bflow = BetaFlow.load(base_dir + 'beta_flow.pkl')
 else:
-    bflow = BetaFlow(theta, weights=sample_weights, number_networks=2,)
+    bflow = BetaFlow(theta, weights=sample_weights, number_networks=NUMBER_NETS)
     bflow.training(conditional, epochs=10000,
-                    loss_type='mean', early_stop=True)
+                    loss_type='sum', early_stop=True)
     bflow.save(base_dir + 'beta_flow.pkl')
 
 
@@ -89,7 +94,7 @@ weights = ns.get_weights()[mask]
 if LOAD:
     flow = MAF.load(base_dir + 'normal_flow.pkl')
 else:
-    flow = MAF(values, weights=weights, number_networks=2)
+    flow = MAF(values, weights=weights, number_networks=NUMBER_NETS)
     flow.train(5000, early_stop=True)
     flow.save(base_dir + 'normal_flow.pkl')
 
@@ -99,40 +104,33 @@ keras.utils.plot_model(bflow.mades[0]._network, "conditional_made.png", show_sha
 print(flow.mades[0]._network.summary())
 keras.utils.plot_model(flow.mades[0]._network, "normal_made.png", show_shapes=True)
 
-
 nflp = flow.log_prob(values).numpy()
 cnflp = bflow.log_prob(values, 1)
 
 from scipy.special import logsumexp
-posterior_probs = ns['logL'] + (ns.logw() - logsumexp(ns.logw())) - ns.stats(1000)['logZ'].mean()
+posterior_probs = ns['logL'] + prior_log_prob - ns.stats(1000)['logZ'].mean()
 posterior_probs = posterior_probs.values[mask]
 
 print('Normal Flow Average Like: ', np.average(nflp, weights=weights))
 print('CNF Average Like: ', np.average(cnflp, weights=weights))
 
-fig, axes = plt.subplots(2, 3, figsize=(10, 10))
+fig, axes = plt.subplots(1, 3, figsize=(6.3, 3))
 
-for j in range(2):
-    axes[j, 0].scatter(posterior_probs, nflp, marker='+', c=posterior_probs, cmap='viridis_r')
-    axes[j, 1].scatter(posterior_probs, cnflp, marker='*', c=posterior_probs, cmap='viridis_r')
+axes[0].scatter(posterior_probs, nflp, marker='+', c=posterior_probs, cmap='viridis_r')
+axes[1].scatter(posterior_probs, cnflp, marker='*', c=posterior_probs, cmap='viridis_r')
+
 for i in range(2):
-    for j in range(2):
-        axes[j, i].plot(posterior_probs, posterior_probs, linestyle='--', color='k')
-        axes[j, i].set_xlabel('True log-posterior')
-        axes[j, i].set_ylabel('Flow log-posterior')
-        axes[j, i].legend()
-        #axes[j, i].text(0.25, 0., 'Over Predict', transform=axes[j, i].transAxes, rotation=45)
-        #axes[j, i].text(0.25, 0.2, 'Under Predict', transform=axes[j, i].transAxes, rotation=45)
-    #axes[0, i].set_xlim([posterior_probs.min(), posterior_probs.max()])
-    #axes[0, i].set_ylim([posterior_probs.min(), posterior_probs.max()])
-
-axes[0, 2].scatter(values[:, 0], values[:, 1], c=posterior_probs, cmap='viridis_r', marker='.')
-axes[0, 2].set_title('Samples')
-axes[0, 2].set_xlabel(r'$\theta_1$')
-axes[0, 2].set_ylabel(r'$\theta_2$')
-axes[1, 2].axis('off')
-axes[0, 0].set_title('Normal margarine')
-axes[0, 1].set_title('beta flow')
+    axes[i].plot(posterior_probs, posterior_probs, linestyle='--', color='k')
+    axes[i].set_xlabel('True log-posterior')
+    axes[i].set_ylabel('Flow log-posterior')
+    axes[i].legend()
+       
+axes[2].scatter(values[:, 0], values[:, 1], c=posterior_probs, cmap='viridis_r', marker='.')
+axes[2].set_title('Samples')
+axes[2].set_xlabel(r'$\theta_1$')
+axes[2].set_ylabel(r'$\theta_2$')
+axes[0].set_title('Normal margarine')
+axes[1].set_title('beta flow')
 plt.tight_layout()
 plt.savefig(base_dir + 'likleihood_comparison.png', dpi=300)
 plt.show()
