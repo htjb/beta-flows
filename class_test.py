@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
+from betaflows.utils import get_beta_schedule
 
 # define tensorflow stuff
 tfk = tf.keras
@@ -15,15 +16,15 @@ tfpl = tfp.layers
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-nbeta_samples = 5
+nbeta_samples = 20
+LOAD = False
 
 base_dir = 'ns_run/'
 
 ns = read_chains(base_dir + 'test')
 
 # beta schedule
-beta = np.linspace(-3, 0, nbeta_samples)
-beta = 10**beta
+beta = get_beta_schedule(ns, nbeta_samples)
 print(beta)
 
 theta, sample_weights, beta_values = [], [], []
@@ -39,21 +40,14 @@ conditional = np.concatenate(beta_values).astype(np.float32)
 theta_min = np.min(theta, axis=0)
 theta_max = np.max(theta, axis=0)
 
-try:
+if LOAD:
     bflow = BetaFlow.load(base_dir + 'beta_flow.pkl')
-except FileNotFoundError:
-    bflow = BetaFlow(theta, weights=sample_weights)#, number_networks=2,)
+else:
+    bflow = BetaFlow(theta, weights=sample_weights, number_networks=2,)
     bflow.training(conditional, epochs=10000,
                     loss_type='mean', early_stop=True)
     bflow.save(base_dir + 'beta_flow.pkl')
 
-"""plt.plot(flow.loss_history, label='train')
-plt.plot(flow.test_loss_history, label='test')
-plt.legend()
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.savefig(base_dir + 'loss.png', dpi=300)
-plt.show()"""
 
 fig, axes = plt.subplots(2, 6, figsize=(10, 6))
 test_beta = [0.01, 0.1, 0.3, 0.5, 0.7, 1]
@@ -92,10 +86,10 @@ mask = np.isfinite(values[:, 0]) & np.isfinite(values[:, 1])
 values = values[mask]
 weights = ns.get_weights()[mask]
 
-try:
+if LOAD:
     flow = MAF.load(base_dir + 'normal_flow.pkl')
-except FileNotFoundError:
-    flow = MAF(values, weights=weights, hidden_layers=[50])
+else:
+    flow = MAF(values, weights=weights, number_networks=2)
     flow.train(5000, early_stop=True)
     flow.save(base_dir + 'normal_flow.pkl')
 
@@ -104,13 +98,13 @@ from tensorflow import keras
 keras.utils.plot_model(bflow.mades[0]._network, "conditional_made.png", show_shapes=True)
 print(flow.mades[0]._network.summary())
 keras.utils.plot_model(flow.mades[0]._network, "normal_made.png", show_shapes=True)
-sys.exit(1)
 
 
 nflp = flow.log_prob(values).numpy()
 cnflp = bflow.log_prob(values, 1)
 
-posterior_probs = ns['logL'] + np.log(ns.get_weights()) - ns.stats(1000)['logZ'].mean()
+from scipy.special import logsumexp
+posterior_probs = ns['logL'] + (ns.logw() - logsumexp(ns.logw())) - ns.stats(1000)['logZ'].mean()
 posterior_probs = posterior_probs.values[mask]
 
 print('Normal Flow Average Like: ', np.average(nflp, weights=weights))
