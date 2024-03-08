@@ -14,9 +14,10 @@ tfpl = tfp.layers
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
-nbeta_samples = 25
+nbeta_samples = 50
 LOAD = False
 NUMBER_NETS = 4
+HIDDEN_LAYERS = [50]
 
 base_dir = 'ns_run/'
 
@@ -29,18 +30,29 @@ for i in range(2):
     bounds.append([round(prior_bounds[0][i], 1), round(prior_bounds[1][i], 1)])
 bounds = np.array(bounds)
 print(bounds)
-prior_log_prob = np.log(1/np.prod(bounds[:, 1] - bounds[:, 0]))
+prior_log_prob = np.log(np.prod((1/(bounds[:, 1] - bounds[:, 0]))))
 
 # beta schedule
 beta = get_beta_schedule(ns, nbeta_samples)
-print(beta)
+#print(beta)
+#print(1-beta)
+#beta = 1- beta
+"""plt.hist(beta, bins=20, histtype='step', label='beta')
+plt.hist(1-beta, bins=20, histtype='step', label='1-beta')
+plt.legend()
+plt.show()
+sys.exit(1)"""
 
+
+import random
 theta, sample_weights, beta_values = [], [], []
 for i,b in enumerate(beta):
     s = ns.set_beta(b)
-    theta.append(s.values[:, :2])
-    sample_weights.append(s.get_weights())
-    beta_values.append([b]*len(s.values))
+    #idx = random.sample(range(len(s.values)), 100)
+    idx = np.arange(len(s.values))
+    theta.append(s.values[:, :2][idx])
+    sample_weights.append(s.get_weights()[idx])
+    beta_values.append([b]*len(idx))
 theta = np.concatenate(theta).astype(np.float32)
 sample_weights = np.concatenate(sample_weights).astype(np.float32)
 conditional = np.concatenate(beta_values).astype(np.float32)
@@ -48,7 +60,8 @@ conditional = np.concatenate(beta_values).astype(np.float32)
 if LOAD:
     bflow = BetaFlow.load(base_dir + 'beta_flow.pkl')
 else:
-    bflow = BetaFlow(theta, weights=sample_weights, number_networks=NUMBER_NETS)
+    bflow = BetaFlow(theta, weights=sample_weights, 
+        number_networks=NUMBER_NETS, hidden_layers=HIDDEN_LAYERS,)
     bflow.training(conditional, epochs=10000,
                     loss_type='sum', early_stop=True)
     bflow.save(base_dir + 'beta_flow.pkl')
@@ -94,15 +107,17 @@ weights = ns.get_weights()[mask]
 if LOAD:
     flow = MAF.load(base_dir + 'normal_flow.pkl')
 else:
-    flow = MAF(values, weights=weights, number_networks=NUMBER_NETS)
+    flow = MAF(values, weights=weights, 
+        number_networks=NUMBER_NETS,
+        hidden_layers=HIDDEN_LAYERS)
     flow.train(5000, early_stop=True)
     flow.save(base_dir + 'normal_flow.pkl')
 
-print(bflow.mades[0]._network.summary())
-from tensorflow import keras
-keras.utils.plot_model(bflow.mades[0]._network, "conditional_made.png", show_shapes=True)
-print(flow.mades[0]._network.summary())
-keras.utils.plot_model(flow.mades[0]._network, "normal_made.png", show_shapes=True)
+#print(bflow.mades[0]._network.summary())
+#from tensorflow import keras
+#keras.utils.plot_model(bflow.mades[0]._network, "conditional_made.png", show_shapes=True)
+#print(flow.mades[0]._network.summary())
+#keras.utils.plot_model(flow.mades[0]._network, "normal_made.png", show_shapes=True)
 
 nflp = flow.log_prob(values).numpy()
 cnflp = bflow.log_prob(values, 1)

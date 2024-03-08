@@ -19,7 +19,7 @@ tfb = tfp.bijectors
 class BetaFlow():
     def __init__(self, theta, **kwargs):
         self.number_networks = kwargs.pop('number_networks', 6)
-        self.learning_rate = kwargs.pop('learning_rate', 1e-3)
+        self.learning_rate = kwargs.pop('learning_rate', 1e-4)
         self.hidden_layers = kwargs.pop('hidden_layers', [50, 50])
         self.parameters = kwargs.pop('parameters', None)
         self.conditional_dims = kwargs.pop('conditional_dims', 1)
