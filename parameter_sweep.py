@@ -8,9 +8,11 @@ from betaflows.betaflows import BetaFlow
 from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
 
 nbeta_samples = [10, 25, 50, 100, 250]
-LOAD_BETA_FLOW = False
-LOAD_MAF = False
+LOAD_BETA_FLOW = True
+LOAD_MAF = True
 PLOT_FLOW = False
+PLOT_LIKE =False
+PLOT_HIST_LIKE = True
 NUMBER_NETS = [2, 4, 6]
 HIDDEN_LAYERS = [[50], [50, 50]]
 ndims = 2
@@ -63,31 +65,34 @@ for i in range(len(params)):
     if PLOT_FLOW:
         fig, axes = plt.subplots(2, 6, figsize=(10, 6))
         test_beta = [0.01, 0.1, 0.3, 0.5, 0.7, 1]
-        for i in range(len(test_beta)):
+        for f in range(len(test_beta)):
             nsamplesGen = len(ns.values)
-            samples = bflow.sample(10000, test_beta[i])
+            samples = bflow.sample(10000, test_beta[f])
             samples = samples.numpy()
 
-            s = ns.set_beta(test_beta[i])
+            s = ns.set_beta(test_beta[f])
             try:
-                kde_contour_plot_2d(axes[0, i], s.values[:, 0], s.values[:, 1], weights=s.get_weights())
-                kde_contour_plot_2d(axes[1, i], samples[:, 0], samples[:, 1])
+                kde_contour_plot_2d(axes[0, f], s.values[:, 0], s.values[:, 1], weights=s.get_weights())
+                kde_contour_plot_2d(axes[1, f], samples[:, 0], samples[:, 1])
             except:
-                axes[0, i].hist2d(s.values[:, 0], s.values[:, 1], weights=s.get_weights(), bins=50)
-                axes[1, i].hist2d(samples[:, 0], samples[:, 1], bins=50)
+                axes[0, f].hist2d(s.values[:, 0], s.values[:, 1], weights=s.get_weights(), bins=50)
+                axes[1, f].hist2d(samples[:, 0], samples[:, 1], bins=50)
 
         ax = axes.flatten()
-        for i in range(len(ax)):
-            ax[i].set_xlabel(r'$\theta_1$')
+        for j in range(len(ax)):
+            ax[j].set_xlabel(r'$\theta_1$')
         ax[0].set_ylabel('Truth\n' + r'$\theta_2$')
         ax[5].set_ylabel('Flow\n' + r'$\theta_2$')
-        for i in range(len(test_beta)):
-            ax[i].set_title(r'$\beta=$'+str(test_beta[i]))
+        for j in range(len(test_beta)):
+            ax[j].set_title(r'$\beta=$'+str(test_beta[j]))
         plt.tight_layout()
         plt.savefig(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
-                              'hls_{params[i][2]}.png', dpi=300,
+                              f'hls_{params[i][2]}.png', dpi=300,
                               bbox_inches='tight')
-        plt.show()
+        #plt.show()
+        plt.close()
+
+
 
 ############## Train beta=1 flow (normal margarine) ############
 
@@ -128,6 +133,42 @@ for i in range(len(params)):
 
     posterior_probs = ns['logL'] + prior_log_prob - ns.stats(1000)['logZ'].mean()
     posterior_probs = posterior_probs.values[mask]
+
+    if PLOT_LIKE:
+        fig, axes = plt.subplots(1, 2, figsize=(6.3, 3), sharey=True)
+
+        axes[0].scatter(posterior_probs, nflp, marker='+', c=posterior_probs, cmap='viridis_r')
+        axes[1].scatter(posterior_probs, cnflp, marker='*', c=posterior_probs, cmap='viridis_r')
+
+        for j in range(2):
+            axes[j].plot(posterior_probs, posterior_probs, linestyle='--', color='k')
+            axes[j].set_xlabel('True log-posterior')
+            axes[j].set_ylabel('Flow log-posterior')
+            axes[j].legend()
+        axes[0].set_title('Normal Flow')
+        axes[1].set_title('CNF')
+        plt.suptitle(f'nbeta={params[i][0]}, nns={params[i][1]}, hls={params[i][2]}')
+        plt.tight_layout()
+        plt.savefig(base_dir + f'likleihood_comparison__nbeta_{params[i][0]}_nns_{params[i][1]}_' +
+                                f'hls_{params[i][2]}.png', dpi=300)
+        plt.show()
+
+    if PLOT_HIST_LIKE:
+        fig, axes = plt.subplots(1, 1, figsize=(4, 4), sharey=True)
+
+        axes.hist(posterior_probs, bins=20, alpha=0.5, label='True log-posterior', color='b', histtype='step')
+        axes.hist(nflp, bins=20, alpha=0.5, label='Normal Flow log-posterior', color='r', histtype='step')
+        axes.hist(cnflp, bins=20, alpha=0.5, label='CNF log-posterior', color='g', histtype='step')
+        
+        axes.set_xlabel('Log-posterior')
+        axes.set_ylabel('Frequency')
+        axes.legend()
+        axes.set_yscale('log')
+        plt.suptitle(f'nbeta={params[i][0]}, nns={params[i][1]}, hls={params[i][2]}')
+        plt.tight_layout()
+        plt.savefig(base_dir + f'hist_likleihood_comparison_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
+                                f'hls_{params[i][2]}.png', dpi=300)
+        plt.show()
 
     fractional_diff_nflp = np.mean(np.abs(1 - np.exp(nflp - posterior_probs)))
     fractional_diff_cnflp = np.mean(np.abs(1 - np.exp(cnflp - posterior_probs)))
@@ -183,5 +224,7 @@ ax.plot(betas, six_two_fifty[:, 1], label='MAF 6, [50, 50]', c='k', linestyle='-
 ax.set_xlabel(r'$\beta$')
 ax.set_ylabel('Fractional Difference')
 ax.legend()
+plt.tight_layout()
+plt.savefig(base_dir + 'fractional_diff.png', dpi=300)
 plt.show()
 
