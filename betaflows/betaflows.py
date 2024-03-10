@@ -285,23 +285,39 @@ class BetaFlow():
                         self.hidden_layers,
                         self.learning_rate,
                         self.theta_min,
-                        self.theta_max], f)
+                        self.theta_max,
+                        self.test_loss_history,
+                        self.loss_history], f)
 
     @classmethod
     def load(cls, filename):
 
         with open(filename, 'rb') as f:
             data = pickle.load(f)
-            theta, nn_weights, \
-                sample_weights, \
-                number_networks, \
-                hidden_layers, \
-                learning_rate, theta_min, theta_max = data
+            try:
+                theta, nn_weights, \
+                    sample_weights, \
+                    number_networks, \
+                    hidden_layers, \
+                    learning_rate, theta_min, theta_max,\
+                    test_loss_history, loss_history = data
+            except:
+                theta, nn_weights, \
+                    sample_weights, \
+                    number_networks, \
+                    hidden_layers, \
+                    learning_rate, theta_min, theta_max = data
+                print('No loss history found.')
+                test_loss_history = None
+                loss_history = None
+                
 
         bijector = cls(
             theta, weights=sample_weights, number_networks=number_networks,
             learning_rate=learning_rate, hidden_layers=hidden_layers,
             theta_min=theta_min, theta_max=theta_max)
+        bijector.loss_history = loss_history
+        bijector.test_loss_history = test_loss_history
         bijector(
             np.random.uniform(0, 1, size=(len(theta), theta.shape[-1])),
             np.array([1]*len(theta)).reshape(-1, 1))
