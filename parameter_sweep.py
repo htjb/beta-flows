@@ -26,7 +26,10 @@ import os
 if not os.path.exists(base_dir):
     os.makedirs(base_dir)
 
-prior_bounds = approx_uniform_prior_bounds(ns, ndims)
+prior_bounds = [[-5, -5], [5, 5]]
+
+#prior_bounds = approx_uniform_prior_bounds(ns, ndims)
+
 bounds = []
 for i in range(ndims):
     bounds.append([round(prior_bounds[0][i], 1), round(prior_bounds[1][i], 1)])
@@ -171,48 +174,79 @@ for i in range(len(params)):
                                 f'hls_{params[i][2]}.png', dpi=300)
         plt.show()
 
-    fractional_diff_nflp = np.mean(np.abs(1 - np.exp(nflp - posterior_probs)))
-    fractional_diff_cnflp = np.mean(np.abs(1 - np.exp(cnflp - posterior_probs)))
+    #fractional_diff_nflp = np.mean((1 - np.exp(nflp - posterior_probs)))
+    #fractional_diff_cnflp = np.mean((1 - np.exp(cnflp - posterior_probs)))
+    fractional_diff_nflp = np.mean(np.abs(posterior_probs - nflp)/np.abs(posterior_probs))
+    fractional_diff_cnflp = np.mean(np.abs(posterior_probs - cnflp)/np.abs(posterior_probs))
     fdiff_cnflp.append(fractional_diff_cnflp)
     fdiff_nflp.append(fractional_diff_nflp)
 
 fdiff_cnflp = np.array(fdiff_cnflp)
 fdiff_nflp = np.array(fdiff_nflp)
 
-grid_cnflp = []
-grid_nflp = []
-for i in range(len(nbeta_samples)):
-    nbeta_step_cnflp = []
-    nbeta_step_nflp = []
-    for k in range(len(NUMBER_NETS)):
-        for j in range(len(HIDDEN_LAYERS)):
-            if j == 0:
-                nbeta_step_cnflp.append(fdiff_cnflp[i+k+j])
-                nbeta_step_nflp.append(fdiff_nflp[i+k+j])
-    grid_cnflp.append(nbeta_step_cnflp)
-    grid_nflp.append(nbeta_step_nflp)
 
-if PLOT_IMSHOWS:
-    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
-    im = axes[0].imshow(grid_nflp, cmap='viridis', interpolation='none')
-    axes[0].set_xticks(np.arange(len(NUMBER_NETS)))
-    axes[0].set_yticks(np.arange(len(nbeta_samples)))
-    axes[0].set_xticklabels(NUMBER_NETS)
-    axes[0].set_yticklabels(nbeta_samples)
-    axes[0].set_xlabel('Repeats')
-    axes[0].set_ylabel('Number of beta samples')
-    axes[0].set_title('Normal Flow')
+fdiff_cnflp5050s = fdiff_cnflp[1::2]
+fdiff_nflp5050s = fdiff_nflp[1::2]
+fdiff_cnflp50s = fdiff_cnflp[::2]
+fdiff_nflp50s = fdiff_nflp[::2]
+params5050 = params[1::2]
+params50 = params[::2]
+print(fdiff_cnflp, fdiff_nflp)
+print(fdiff_cnflp50s, fdiff_nflp50s)
+print(fdiff_cnflp5050s, fdiff_nflp5050s)
 
-    im = axes[1].imshow(grid_cnflp, cmap='viridis', interpolation='none')
-    axes[1].set_xticks(np.arange(len(NUMBER_NETS)))
-    axes[1].set_yticks(np.arange(len(nbeta_samples)))
-    axes[1].set_xticklabels(NUMBER_NETS)
-    axes[1].set_yticklabels(nbeta_samples)
-    axes[1].set_xlabel('Number Nets')
-    axes[1].set_ylabel('Number of beta samples')
-    axes[1].set_title('CNF')
+params50 = np.array([[params50[i][0], params50[i][1]] for i in range(len(params50))])
+params5050 = np.array([[params5050[i][0], params5050[i][1]] for i in range(len(params5050))])
+params50 = params50.reshape(len(nbeta_samples), len(NUMBER_NETS), 2)
+params5050 = params5050.reshape(len(nbeta_samples), len(NUMBER_NETS), 2)
+grid_nflp50 = fdiff_nflp50s.reshape(len(nbeta_samples), len(NUMBER_NETS))
+grid_cnflp50 = fdiff_cnflp50s.reshape(len(nbeta_samples), len(NUMBER_NETS))
+grid_nflp5050 = fdiff_nflp5050s.reshape(len(nbeta_samples), len(NUMBER_NETS))
+grid_cnflp5050 = fdiff_cnflp5050s.reshape(len(nbeta_samples), len(NUMBER_NETS))
 
-    plt.tight_layout()
-    [plt.colorbar(im, ax=axes[i]) for i in range(2)]
-    plt.savefig(base_dir + 'fractional_diff.png', dpi=300)
-    plt.show()
+fig, axes = plt.subplots(2, 2, figsize=(8, 8))
+axes = axes.flatten()
+im1 = axes[0].imshow(grid_nflp50, cmap='viridis', interpolation='none')
+axes[0].set_xticks(np.arange(len(NUMBER_NETS)))
+axes[0].set_yticks(np.arange(len(nbeta_samples)))
+axes[0].set_xticklabels(NUMBER_NETS)
+axes[0].set_yticklabels(np.arange(len(nbeta_samples)))
+axes[0].set_xlabel('Number Nets')
+axes[0].set_ylabel('Repeats')
+axes[0].set_title('Normal Flow, hl=[50]')
+plt.colorbar(im1, ax=axes[0])
+
+im2 = axes[1].imshow(grid_cnflp50, cmap='viridis', interpolation='none')
+axes[1].set_xticks(np.arange(len(NUMBER_NETS)))
+axes[1].set_yticks(np.arange(len(nbeta_samples)))
+axes[1].set_xticklabels(NUMBER_NETS)
+axes[1].set_yticklabels(nbeta_samples)
+axes[1].set_xlabel('Number Nets')
+axes[1].set_ylabel('Number Beta Samples')
+axes[1].set_title('CNF, hl=[50]')
+plt.colorbar(im2, ax=axes[1])
+
+im3 = axes[2].imshow(grid_nflp5050, cmap='viridis', interpolation='none')
+axes[2].set_xticks(np.arange(len(NUMBER_NETS)))
+axes[2].set_yticks(np.arange(len(nbeta_samples)))
+axes[2].set_xticklabels(NUMBER_NETS)
+axes[2].set_yticklabels(np.arange(len(nbeta_samples)))
+axes[2].set_xlabel('Number Nets')
+axes[2].set_ylabel('Repeats')
+axes[2].set_title('Normal Flow, hl=[50, 50]')
+plt.colorbar(im3, ax=axes[2])
+
+im4 = axes[3].imshow(grid_cnflp5050, cmap='viridis', interpolation='none')
+axes[3].set_xticks(np.arange(len(NUMBER_NETS)))
+axes[3].set_yticks(np.arange(len(nbeta_samples)))
+axes[3].set_xticklabels(NUMBER_NETS)
+axes[3].set_yticklabels(nbeta_samples)
+axes[3].set_xlabel('Number Nets')
+axes[3].set_ylabel('Number Beta Samples')
+axes[3].set_title('CNF, hl=[50, 50]')
+plt.colorbar(im4, ax=axes[3])
+
+plt.tight_layout()
+plt.savefig(base_dir + 'fractional_diff.png', dpi=300)
+plt.show()
+
