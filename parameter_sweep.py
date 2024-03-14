@@ -12,7 +12,8 @@ LOAD_BETA_FLOW = True
 LOAD_MAF = True
 PLOT_FLOW = False
 PLOT_LIKE =False
-PLOT_HIST_LIKE = True
+PLOT_HIST_LIKE = False
+PLOT_IMSHOWS = True
 NUMBER_NETS = [2, 4, 6]
 HIDDEN_LAYERS = [[50], [50, 50]]
 ndims = 2
@@ -178,53 +179,40 @@ for i in range(len(params)):
 fdiff_cnflp = np.array(fdiff_cnflp)
 fdiff_nflp = np.array(fdiff_nflp)
 
-two_one_fifty, two_two_fifty = [], []
-four_one_fifty, four_two_fifty = [], []
-six_one_fifty, six_two_fifty = [], []
-for i in range(len(fdiff_cnflp)):
-    if params[i][1] == 2:
-        if params[i][2] == [50]:
-            two_one_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
-        else:
-            two_two_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
-    elif params[i][1] == 4:
-        if params[i][2] == [50]:
-            four_one_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
-        else:
-            four_two_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
-    else:
-        if params[i][2] == [50]:
-            six_one_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
-        else:
-            six_two_fifty.append([fdiff_cnflp[i], fdiff_nflp[i]])
+grid_cnflp = []
+grid_nflp = []
+for i in range(len(nbeta_samples)):
+    nbeta_step_cnflp = []
+    nbeta_step_nflp = []
+    for k in range(len(NUMBER_NETS)):
+        for j in range(len(HIDDEN_LAYERS)):
+            if j == 0:
+                nbeta_step_cnflp.append(fdiff_cnflp[i+k+j])
+                nbeta_step_nflp.append(fdiff_nflp[i+k+j])
+    grid_cnflp.append(nbeta_step_cnflp)
+    grid_nflp.append(nbeta_step_nflp)
 
-two_one_fifty = np.array(two_one_fifty)
-two_two_fifty = np.array(two_two_fifty)
-four_one_fifty = np.array(four_one_fifty)
-four_two_fifty = np.array(four_two_fifty)
-six_one_fifty = np.array(six_one_fifty)
-six_two_fifty = np.array(six_two_fifty)
+if PLOT_IMSHOWS:
+    fig, axes = plt.subplots(1, 2, figsize=(8, 4))
+    im = axes[0].imshow(grid_nflp, cmap='viridis', interpolation='none')
+    axes[0].set_xticks(np.arange(len(NUMBER_NETS)))
+    axes[0].set_yticks(np.arange(len(nbeta_samples)))
+    axes[0].set_xticklabels(NUMBER_NETS)
+    axes[0].set_yticklabels(nbeta_samples)
+    axes[0].set_xlabel('Repeats')
+    axes[0].set_ylabel('Number of beta samples')
+    axes[0].set_title('Normal Flow')
 
-betas = [10, 25, 50, 100, 250]
-fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-ax.plot(betas, two_one_fifty[:, 0], label='Beta 2, [50]', c='r')
-ax.plot(betas, two_two_fifty[:, 0], label='Beta 2, [50, 50]', c='b')
-ax.plot(betas, four_one_fifty[:, 0], label='Beta 4, [50]', c='g')
-ax.plot(betas, four_two_fifty[:, 0], label='Beta 4, [50, 50]', c='c')
-ax.plot(betas, six_one_fifty[:, 0], label='Beta 6, [50]', c='m')
-ax.plot(betas, six_two_fifty[:, 0], label='Beta 6, [50, 50]', c='k')
+    im = axes[1].imshow(grid_cnflp, cmap='viridis', interpolation='none')
+    axes[1].set_xticks(np.arange(len(NUMBER_NETS)))
+    axes[1].set_yticks(np.arange(len(nbeta_samples)))
+    axes[1].set_xticklabels(NUMBER_NETS)
+    axes[1].set_yticklabels(nbeta_samples)
+    axes[1].set_xlabel('Number Nets')
+    axes[1].set_ylabel('Number of beta samples')
+    axes[1].set_title('CNF')
 
-ax.plot(betas, two_one_fifty[:, 1], label='MAF 2, [50]', c='r', linestyle='--')
-ax.plot(betas, two_two_fifty[:, 1], label='MAF 2, [50, 50]', c='b', linestyle='--')
-ax.plot(betas, four_one_fifty[:, 1], label='MAF 4, [50]', c='g', linestyle='--')
-ax.plot(betas, four_two_fifty[:, 1], label='MAF 4, [50, 50]', c='c', linestyle='--')
-ax.plot(betas, six_one_fifty[:, 1], label='MAF 6, [50]', c='m', linestyle='--')
-ax.plot(betas, six_two_fifty[:, 1], label='MAF 6, [50, 50]', c='k', linestyle='--')
-
-ax.set_xlabel(r'$\beta$')
-ax.set_ylabel('Fractional Difference')
-ax.legend()
-plt.tight_layout()
-plt.savefig(base_dir + 'fractional_diff.png', dpi=300)
-plt.show()
-
+    plt.tight_layout()
+    [plt.colorbar(im, ax=axes[i]) for i in range(2)]
+    plt.savefig(base_dir + 'fractional_diff.png', dpi=300)
+    plt.show()
