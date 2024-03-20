@@ -67,7 +67,9 @@ class BetaFlow():
 
 
     def training(self, conditional, epochs=100,
-                    loss_type='mean', early_stop=True):
+                    loss_type='mean', early_stop=True, **kwargs):
+        
+        patience = kwargs.pop('patience', round((epochs/100)*2))
 
         """Training the masked autoregressive flow.
         
@@ -116,7 +118,7 @@ class BetaFlow():
                         minimum_model = self.maf.copy()
                         c = 0
                 if minimum_model:
-                    if c == round((epochs/100)*2):
+                    if c == patience:
                         print('Early stopped. Epochs used = ' + str(i) +
                                 '. Minimum at epoch = ' + str(minimum_epoch))
                         self.maf = minimum_model.copy()
