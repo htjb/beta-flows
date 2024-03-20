@@ -38,7 +38,7 @@ class BetaFlow():
         self.theta_max = kwargs.pop('theta_max', a)
 
         self.optimizer = tf.keras.optimizers.legacy.Adam(
-                learning_rate=1e-3)
+                learning_rate=self.learning_rate)
 
         # standard autoregressive network
         self.mades = [tfb.AutoregressiveNetwork(
@@ -47,7 +47,7 @@ class BetaFlow():
             event_shape=(self.dims,),
             conditional=True,
             conditional_event_shape=(self.conditional_dims,),
-            activation="sigmoid",
+            activation="tanh",
             dtype=np.float32
         ) for i in range(self.number_networks)]
 
@@ -67,20 +67,22 @@ class BetaFlow():
 
 
     def training(self, conditional, epochs=100,
-                    loss_type='mean', early_stop=True, **kwargs):
-        
-        patience = kwargs.pop('patience', round((epochs/100)*2))
+                    loss_type='sum', early_stop=True, patience=None):
 
         """Training the masked autoregressive flow.
         
         maf is the transformed distribution.
         """
 
+        if patience is None:
+            patience = round((epochs/100)*2)
+
         phi = _forward_transform(self.theta, self.theta_min, self.theta_max)
         mask = np.isfinite(np.sum(phi, axis=1))
         phi = phi[mask]
         conditional = conditional[mask]
-        weights_phi = self.sample_weights[mask]/tf.reduce_sum(self.sample_weights[mask])
+        # I was normalising the weights here but need to normalise for each beta...
+        weights_phi = self.sample_weights[mask]
         phi = np.hstack([phi, conditional.reshape(-1, 1)]).astype(np.float32)
 
         phi_train, phi_test, weights_phi_train, weights_phi_test = \
