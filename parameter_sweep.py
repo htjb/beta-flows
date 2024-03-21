@@ -7,7 +7,7 @@ from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
 from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
 
-nbeta_samples = [10, 25, 50, 100, 250]
+nbeta_samples = [10, 25, 50]
 LOAD_BETA_FLOW = True
 LOAD_MAF = True
 PLOT_FLOW = False
@@ -47,19 +47,29 @@ for i in range(len(params)):
 
     theta, sample_weights, beta_values = [], [], []
     for j, b in enumerate(beta):
-        s = ns.set_beta(b)
-        theta.append(s.values[:, :ndims])
-        sample_weights.append(s.get_weights())
-        beta_values.append([b]*len(s.values))
+        if j >0:
+            s = ns.set_beta(b)
+            theta.append(s.values[:, :ndims])
+            sample_weights.append(s.get_weights()/s.get_weights().sum())
+            beta_values.append([b]*len(s.values))
     theta = np.concatenate(theta).astype(np.float32)
     sample_weights = np.concatenate(sample_weights).astype(np.float32)
     conditional = np.concatenate(beta_values).astype(np.float32)
 
     if LOAD_BETA_FLOW:
-        bflow = BetaFlow.load(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
+        try:
+            bflow = BetaFlow.load(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
+                              f'hls_{params[i][2]}.pkl')
+        except FileNotFoundError:
+            bflow = BetaFlow(theta, weights=sample_weights, theta_min=np.array([-5, -5]), 
+                             theta_max=np.array([5, 5]),
+                number_networks=params[i][1], hidden_layers=params[i][2],)
+            bflow.training(conditional, epochs=5000,
+                            loss_type='sum', early_stop=True)
+            bflow.save(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                               f'hls_{params[i][2]}.pkl')
     else:
-        bflow = BetaFlow(theta, weights=sample_weights, 
+        bflow = BetaFlow(theta, weights=sample_weights, theta_min=[-5, -5], theta_max=[5, 5],
             number_networks=params[i][1], hidden_layers=params[i][2],)
         bflow.training(conditional, epochs=5000,
                         loss_type='sum', early_stop=True)
@@ -155,7 +165,8 @@ for i in range(len(params)):
         plt.tight_layout()
         plt.savefig(base_dir + f'likleihood_comparison__nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                                 f'hls_{params[i][2]}.png', dpi=300)
-        plt.show()
+        #plt.show()
+        plt.close()
 
     if PLOT_HIST_LIKE:
         fig, axes = plt.subplots(1, 1, figsize=(4, 4), sharey=True)
@@ -172,18 +183,21 @@ for i in range(len(params)):
         plt.tight_layout()
         plt.savefig(base_dir + f'hist_likleihood_comparison_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                                 f'hls_{params[i][2]}.png', dpi=300)
-        plt.show()
+        #plt.show()
+        plt.close()
 
     #fractional_diff_nflp = np.mean((1 - np.exp(nflp - posterior_probs)))
     #fractional_diff_cnflp = np.mean((1 - np.exp(cnflp - posterior_probs)))
-    fractional_diff_nflp = np.mean(np.abs(posterior_probs - nflp)/np.abs(posterior_probs))
-    fractional_diff_cnflp = np.mean(np.abs(posterior_probs - cnflp)/np.abs(posterior_probs))
+    fractional_diff_nflp = np.mean(posterior_probs - nflp)
+    fractional_diff_cnflp = np.mean(posterior_probs - cnflp)
     fdiff_cnflp.append(fractional_diff_cnflp)
     fdiff_nflp.append(fractional_diff_nflp)
 
 fdiff_cnflp = np.array(fdiff_cnflp)
 fdiff_nflp = np.array(fdiff_nflp)
 
+maximum = np.max([np.max(fdiff_cnflp), np.max(fdiff_nflp)])
+minimum = np.min([np.min(fdiff_cnflp), np.min(fdiff_nflp)])
 
 fdiff_cnflp5050s = fdiff_cnflp[1::2]
 fdiff_nflp5050s = fdiff_nflp[1::2]
@@ -206,7 +220,8 @@ grid_cnflp5050 = fdiff_cnflp5050s.reshape(len(nbeta_samples), len(NUMBER_NETS))
 
 fig, axes = plt.subplots(2, 2, figsize=(8, 8))
 axes = axes.flatten()
-im1 = axes[0].imshow(grid_nflp50, cmap='viridis', interpolation='none')
+im1 = axes[0].imshow(grid_nflp50, cmap='viridis', interpolation='none',
+                     vmin=minimum, vmax=maximum)
 axes[0].set_xticks(np.arange(len(NUMBER_NETS)))
 axes[0].set_yticks(np.arange(len(nbeta_samples)))
 axes[0].set_xticklabels(NUMBER_NETS)
@@ -216,7 +231,8 @@ axes[0].set_ylabel('Repeats')
 axes[0].set_title('Normal Flow, hl=[50]')
 plt.colorbar(im1, ax=axes[0])
 
-im2 = axes[1].imshow(grid_cnflp50, cmap='viridis', interpolation='none')
+im2 = axes[1].imshow(grid_cnflp50, cmap='viridis', interpolation='none',
+                     vmin=minimum, vmax=maximum)
 axes[1].set_xticks(np.arange(len(NUMBER_NETS)))
 axes[1].set_yticks(np.arange(len(nbeta_samples)))
 axes[1].set_xticklabels(NUMBER_NETS)
@@ -226,7 +242,8 @@ axes[1].set_ylabel('Number Beta Samples')
 axes[1].set_title('CNF, hl=[50]')
 plt.colorbar(im2, ax=axes[1])
 
-im3 = axes[2].imshow(grid_nflp5050, cmap='viridis', interpolation='none')
+im3 = axes[2].imshow(grid_nflp5050, cmap='viridis', interpolation='none',
+                     vmin=minimum, vmax=maximum)
 axes[2].set_xticks(np.arange(len(NUMBER_NETS)))
 axes[2].set_yticks(np.arange(len(nbeta_samples)))
 axes[2].set_xticklabels(NUMBER_NETS)
@@ -236,7 +253,8 @@ axes[2].set_ylabel('Repeats')
 axes[2].set_title('Normal Flow, hl=[50, 50]')
 plt.colorbar(im3, ax=axes[2])
 
-im4 = axes[3].imshow(grid_cnflp5050, cmap='viridis', interpolation='none')
+im4 = axes[3].imshow(grid_cnflp5050, cmap='viridis', interpolation='none',
+                     vmin=minimum, vmax=maximum)
 axes[3].set_xticks(np.arange(len(NUMBER_NETS)))
 axes[3].set_yticks(np.arange(len(nbeta_samples)))
 axes[3].set_xticklabels(NUMBER_NETS)
