@@ -19,7 +19,7 @@ tfb = tfp.bijectors
 class BetaFlow():
     def __init__(self, theta, **kwargs):
         self.number_networks = kwargs.pop('number_networks', 6)
-        self.learning_rate = kwargs.pop('learning_rate', 1e-4)
+        self.learning_rate = kwargs.pop('learning_rate', 1e-3)
         self.hidden_layers = kwargs.pop('hidden_layers', [50, 50])
         self.parameters = kwargs.pop('parameters', None)
         self.conditional_dims = kwargs.pop('conditional_dims', 1)
@@ -48,7 +48,8 @@ class BetaFlow():
             conditional=True,
             conditional_event_shape=(self.conditional_dims,),
             activation="tanh",
-            dtype=np.float32
+            dtype=np.float32,
+            input_order="random",
         ) for i in range(self.number_networks)]
 
         # make the masked autoregressive flow
@@ -172,7 +173,7 @@ class BetaFlow():
                 maf.trainable_variables))
         return loss
 
-    @tf.function(jit_compile=True, reduce_retracing=True)
+    #@tf.function(jit_compile=True, reduce_retracing=True)
     def log_prob(self, params, c_):
 
             # Enforce float32 dtype

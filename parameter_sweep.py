@@ -177,8 +177,8 @@ for i in range(len(params)):
     if PLOT_LIKE:
         fig, axes = plt.subplots(1, 2, figsize=(6.3, 3), sharey=True)
 
-        axes[0].scatter(posterior_probs, nflp, marker='+', c=posterior_probs, cmap='viridis_r')
-        axes[1].scatter(posterior_probs, cnflp, marker='*', c=posterior_probs, cmap='viridis_r')
+        axes[0].scatter(posterior_probs, nflp, marker='.', c=posterior_probs, cmap='viridis_r')
+        axes[1].scatter(posterior_probs, cnflp, marker='.', c=posterior_probs, cmap='viridis_r')
 
         for j in range(2):
             axes[j].plot(posterior_probs, posterior_probs, linestyle='--', color='k')
@@ -186,6 +186,25 @@ for i in range(len(params)):
             axes[j].set_ylabel('Flow log-posterior')
             axes[j].legend()
             axes[j].set_ylim(-25, 10)
+
+        for j in range(len(nflp)):
+            if nflp[j] < -25:
+                norm_prob = (posterior_probs[j] - posterior_probs.min())/ \
+                        (posterior_probs.max() - posterior_probs.min())
+                axes[0].arrow(posterior_probs[j], -23, 
+                              0, -0.8, head_width=0.3, 
+                              head_length=0.7, 
+                              fc=plt.get_cmap('viridis_r')(norm_prob),
+                              ec='k',#plt.get_cmap('viridis_r')(norm_prob),
+                              lw=0.4)
+            if cnflp[j] < -25:
+                axes[1].arrow(posterior_probs[j], -23, 
+                              0, -0.8, head_width=0.3, 
+                              head_length=0.7, 
+                              fc=plt.get_cmap('viridis_r')(norm_prob),
+                              ec='k',#plt.get_cmap('viridis_r')(norm_prob),
+                              lw=0.4)
+        
         axes[0].set_title('Normal Flow')
         axes[1].set_title('CNF')
         plt.suptitle(f'nbeta={params[i][0]}, nns={params[i][1]}, hls={params[i][2]}')
