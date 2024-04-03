@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
 from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
+import random
 
 nbeta_samples = [10]
 LOAD_BETA_FLOW = False
@@ -15,11 +16,11 @@ PLOT_LIKE =False
 PLOT_IMSHOWS = True
 NUMBER_NETS = [2, 4]
 HIDDEN_LAYERS = [[50], [50, 50]]
-ndims = 4
+ndims = 2
 epochs=5000
 
-#chains_dir = 'rosenbrock/'
-chains_dir = 'mixture_models/ndims_4_nmixtures_5/'
+chains_dir = 'rosenbrock/'
+#chains_dir = 'mixture_models/ndims_4_nmixtures_5/'
 ns = read_chains(chains_dir + 'test')
 
 base_dir = 'parameter_sweep/'
@@ -27,9 +28,9 @@ import os
 if not os.path.exists(base_dir):
     os.makedirs(base_dir)
 
-#prior_bounds = [[-5, -5], [5, 5]]
+prior_bounds = [[-5, -5], [5, 5]]
 
-prior_bounds = approx_uniform_prior_bounds(ns, ndims)
+#prior_bounds = approx_uniform_prior_bounds(ns, ndims)
 
 bounds = []
 for i in range(ndims):
@@ -52,10 +53,18 @@ for i in range(len(params)):
             s = ns.set_beta(b)
             theta.append(s.values[:, :ndims])
             sample_weights.append(s.get_weights()/s.get_weights().sum())
-            beta_values.append([np.log10(b)]*len(s.values))
+            beta_values.append([np.log(b)]*len(s.values))
     theta = np.concatenate(theta).astype(np.float32)
     sample_weights = np.concatenate(sample_weights).astype(np.float32)
     conditional = np.concatenate(beta_values).astype(np.float32)
+    """plt.hist(conditional, bins=100)
+    plt.show()
+    sys.exit(1)"""
+
+    idx = random.sample(range(len(theta)), len(ns.values))
+    theta = theta[idx]
+    sample_weights = sample_weights[idx]
+    conditional = conditional[idx]
 
     if LOAD_BETA_FLOW:
         try:
@@ -63,8 +72,8 @@ for i in range(len(params)):
                               f'hls_{params[i][2]}.pkl')
         except FileNotFoundError:
             bflow = BetaFlow(theta, weights=sample_weights, 
-                             #theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
-                             #theta_max=np.array([5.0, 5.0]).astype(np.float32),
+                             theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
+                             theta_max=np.array([5.0, 5.0]).astype(np.float32),
                 number_networks=params[i][1], hidden_layers=params[i][2],)
             bflow.training(conditional, epochs=epochs,
                             loss_type='mean', early_stop=True)
@@ -72,8 +81,8 @@ for i in range(len(params)):
                               f'hls_{params[i][2]}.pkl')
     else:
         bflow = BetaFlow(theta, weights=sample_weights, 
-                         #theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
-                         #theta_max=np.array([5.0, 5.0]).astype(np.float32),
+                         theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
+                         theta_max=np.array([5.0, 5.0]).astype(np.float32),
             number_networks=params[i][1], hidden_layers=params[i][2],)
         bflow.training(conditional, epochs=epochs,
                         loss_type='mean', early_stop=True)
@@ -126,8 +135,8 @@ for i in range(len(mafparams)):
                         f'hls_{mafparams[i][1]}.pkl')
     else:
         flow = MAF(values, weights=weights,
-            #theta_min=np.array([-5.0, -5.0]).astype(np.float32),
-            #theta_max=np.array([5.0, 5.0]).astype(np.float32), 
+            theta_min=np.array([-5.0, -5.0]).astype(np.float32),
+            theta_max=np.array([5.0, 5.0]).astype(np.float32), 
             number_networks=params[i][1],
             hidden_layers=params[i][2])
         flow.train(epochs, early_stop=True)
@@ -143,7 +152,9 @@ for i in range(len(params)):
                         f'hls_{params[i][2]}.pkl')
     
     nflp = flow.log_prob(values).numpy()
-    cnflp = bflow.log_prob(values, 0)
+    #beta = tf.math.log(1.0)
+    beta = np.log(1)
+    cnflp = bflow.log_prob(values, beta)
 
     mask = np.isfinite(nflp) & np.isfinite(cnflp)
     nflp = nflp[mask]
