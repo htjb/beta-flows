@@ -7,6 +7,8 @@ def get_beta_schedule(samples, n, plot=False):
     D_KL = samples.D_KL(beta=beta)
     D_KLi = np.linspace(0, D_KL.max(), n)
     beta = np.interp(D_KLi, D_KL, beta)
+    # in my code I discard the first beta value as it looks like an outlier... need
+    # to talk to Will...
 
     if plot:
         plt.plot(beta, D_KLi, '.')

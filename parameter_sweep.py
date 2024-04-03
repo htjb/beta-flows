@@ -7,18 +7,19 @@ from anesthetic import read_chains
 from betaflows.betaflows import BetaFlow
 from betaflows.utils import get_beta_schedule, approx_uniform_prior_bounds
 
-nbeta_samples = [10, 25, 50]
-LOAD_BETA_FLOW = True
-LOAD_MAF = True
+nbeta_samples = [10]
+LOAD_BETA_FLOW = False
+LOAD_MAF = False
 PLOT_FLOW = False
 PLOT_LIKE =False
-PLOT_HIST_LIKE = False
 PLOT_IMSHOWS = True
-NUMBER_NETS = [2, 4, 6]
+NUMBER_NETS = [2, 4]
 HIDDEN_LAYERS = [[50], [50, 50]]
-ndims = 2
+ndims = 4
+epochs=5000
 
-chains_dir = 'rosenbrock/'
+#chains_dir = 'rosenbrock/'
+chains_dir = 'mixture_models/ndims_4_nmixtures_5/'
 ns = read_chains(chains_dir + 'test')
 
 base_dir = 'parameter_sweep/'
@@ -26,9 +27,9 @@ import os
 if not os.path.exists(base_dir):
     os.makedirs(base_dir)
 
-prior_bounds = [[-5, -5], [5, 5]]
+#prior_bounds = [[-5, -5], [5, 5]]
 
-#prior_bounds = approx_uniform_prior_bounds(ns, ndims)
+prior_bounds = approx_uniform_prior_bounds(ns, ndims)
 
 bounds = []
 for i in range(ndims):
@@ -51,7 +52,7 @@ for i in range(len(params)):
             s = ns.set_beta(b)
             theta.append(s.values[:, :ndims])
             sample_weights.append(s.get_weights()/s.get_weights().sum())
-            beta_values.append([b]*len(s.values))
+            beta_values.append([np.log10(b)]*len(s.values))
     theta = np.concatenate(theta).astype(np.float32)
     sample_weights = np.concatenate(sample_weights).astype(np.float32)
     conditional = np.concatenate(beta_values).astype(np.float32)
@@ -61,18 +62,21 @@ for i in range(len(params)):
             bflow = BetaFlow.load(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                               f'hls_{params[i][2]}.pkl')
         except FileNotFoundError:
-            bflow = BetaFlow(theta, weights=sample_weights, theta_min=np.array([-5, -5]), 
-                             theta_max=np.array([5, 5]),
+            bflow = BetaFlow(theta, weights=sample_weights, 
+                             #theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
+                             #theta_max=np.array([5.0, 5.0]).astype(np.float32),
                 number_networks=params[i][1], hidden_layers=params[i][2],)
-            bflow.training(conditional, epochs=5000,
-                            loss_type='sum', early_stop=True)
+            bflow.training(conditional, epochs=epochs,
+                            loss_type='mean', early_stop=True)
             bflow.save(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                               f'hls_{params[i][2]}.pkl')
     else:
-        bflow = BetaFlow(theta, weights=sample_weights, theta_min=[-5, -5], theta_max=[5, 5],
+        bflow = BetaFlow(theta, weights=sample_weights, 
+                         #theta_min=np.array([-5.0, -5.0]).astype(np.float32), 
+                         #theta_max=np.array([5.0, 5.0]).astype(np.float32),
             number_networks=params[i][1], hidden_layers=params[i][2],)
-        bflow.training(conditional, epochs=5000,
-                        loss_type='sum', early_stop=True)
+        bflow.training(conditional, epochs=epochs,
+                        loss_type='mean', early_stop=True)
         bflow.save(base_dir + f'beta_flow_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
                               f'hls_{params[i][2]}.pkl')
 
@@ -106,14 +110,13 @@ for i in range(len(params)):
         #plt.show()
         plt.close()
 
-
-
 ############## Train beta=1 flow (normal margarine) ############
 
 from margarine.maf import MAF
 
 values = ns.values[:, :ndims]
 weights = ns.get_weights()
+weights /= weights.sum()
 
 mafparams = list(itertools.product(NUMBER_NETS, HIDDEN_LAYERS))
 
@@ -122,10 +125,12 @@ for i in range(len(mafparams)):
         flow = MAF.load(base_dir + f'normal_flow_nns_{mafparams[i][0]}_' +
                         f'hls_{mafparams[i][1]}.pkl')
     else:
-        flow = MAF(values, weights=weights, 
+        flow = MAF(values, weights=weights,
+            #theta_min=np.array([-5.0, -5.0]).astype(np.float32),
+            #theta_max=np.array([5.0, 5.0]).astype(np.float32), 
             number_networks=params[i][1],
             hidden_layers=params[i][2])
-        flow.train(5000, early_stop=True)
+        flow.train(epochs, early_stop=True)
         flow.save(base_dir + f'normal_flow_nns_{mafparams[i][0]}_' +
                         f'hls_{mafparams[i][1]}.pkl')
 
@@ -138,7 +143,7 @@ for i in range(len(params)):
                         f'hls_{params[i][2]}.pkl')
     
     nflp = flow.log_prob(values).numpy()
-    cnflp = bflow.log_prob(values, 1)
+    cnflp = bflow.log_prob(values, 0)
 
     mask = np.isfinite(nflp) & np.isfinite(cnflp)
     nflp = nflp[mask]
@@ -168,28 +173,8 @@ for i in range(len(params)):
         #plt.show()
         plt.close()
 
-    if PLOT_HIST_LIKE:
-        fig, axes = plt.subplots(1, 1, figsize=(4, 4), sharey=True)
-
-        axes.hist(posterior_probs, bins=20, alpha=0.5, label='True log-posterior', color='b', histtype='step')
-        axes.hist(nflp, bins=20, alpha=0.5, label='Normal Flow log-posterior', color='r', histtype='step')
-        axes.hist(cnflp, bins=20, alpha=0.5, label='CNF log-posterior', color='g', histtype='step')
-        
-        axes.set_xlabel('Log-posterior')
-        axes.set_ylabel('Frequency')
-        axes.legend()
-        axes.set_yscale('log')
-        plt.suptitle(f'nbeta={params[i][0]}, nns={params[i][1]}, hls={params[i][2]}')
-        plt.tight_layout()
-        plt.savefig(base_dir + f'hist_likleihood_comparison_nbeta_{params[i][0]}_nns_{params[i][1]}_' +
-                                f'hls_{params[i][2]}.png', dpi=300)
-        #plt.show()
-        plt.close()
-
-    #fractional_diff_nflp = np.mean((1 - np.exp(nflp - posterior_probs)))
-    #fractional_diff_cnflp = np.mean((1 - np.exp(cnflp - posterior_probs)))
-    fractional_diff_nflp = np.mean(posterior_probs - nflp)
-    fractional_diff_cnflp = np.mean(posterior_probs - cnflp)
+    fractional_diff_nflp = np.average(posterior_probs - nflp, weights=weights)
+    fractional_diff_cnflp = np.average(posterior_probs - cnflp, weights=weights)
     fdiff_cnflp.append(fractional_diff_cnflp)
     fdiff_nflp.append(fractional_diff_nflp)
 
