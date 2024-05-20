@@ -50,6 +50,7 @@ class BetaFlow():
             activation="tanh",
             dtype=np.float32,
             input_order="random",
+            kernel_regularizer=tf.keras.regularizers.l2(0.01),
         ) for i in range(self.number_networks)]
 
         # make the masked autoregressive flow
