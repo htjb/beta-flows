@@ -47,6 +47,7 @@ class BetaFlow():
             event_shape=(self.dims,),
             conditional=True,
             conditional_event_shape=(self.conditional_dims,),
+            conditional_input_layers='first_layer',
             activation="tanh",
             dtype=np.float32,
             input_order="random",
