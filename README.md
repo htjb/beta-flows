@@ -71,10 +71,10 @@ distribution and has many other applications.
 Please cite this code base if you use Beta-flows in your work.
 
 ```bibtex
-@article{lsbi,
-    year  = {2023},
-    author = {Will Handley et al},
-    title = {lsbi: Linear Simulation Based Inference},
+@article{beta-flows,
+    year  = {2024},
+    author = {Harry Bevins et al},
+    title = {beta-flows: Temperature dependent Normalising Flows},
     journal = {In preparation}
 }
 ```
