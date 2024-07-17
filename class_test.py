@@ -16,7 +16,6 @@ ndims = 2
 base_dir = 'rosenbrock/'
 ns = read_chains(base_dir + 'test')
 
-
 prior_bounds = approx_uniform_prior_bounds(ns, ndims)
 print(prior_bounds)
 bounds = []
@@ -26,17 +25,8 @@ bounds = np.array(bounds)
 print(bounds)
 prior_log_prob = np.log(np.prod((1/(bounds[:, 1] - bounds[:, 0]))))
 
-
-# beta schedule
 beta = get_beta_schedule(ns, nbeta_samples)
-#print(beta)
-#print(1-beta)
-#beta = 1- beta
-"""plt.hist(beta, bins=20, histtype='step', label='beta')
-plt.hist(1-beta, bins=20, histtype='step', label='1-beta')
-plt.legend()
-plt.show()
-sys.exit(1)"""
+
 
 
 import random
@@ -71,16 +61,16 @@ for i in range(len(test_beta)):
 
     s = ns.set_beta(test_beta[i])
     try:
-        kde_contour_plot_2d(axes[0, i], s.values[:, 0], s.values[:, 1], weights=s.get_weights())
+        kde_contour_plot_2d(axes[0, i], s.values[:, 0], 
+                            s.values[:, 1], weights=s.get_weights())
         kde_contour_plot_2d(axes[1, i], samples[:, 0], samples[:, 1])
     except:
-        axes[0, i].hist2d(s.values[:, 0], s.values[:, 1], weights=s.get_weights(), bins=50)
+        axes[0, i].hist2d(s.values[:, 0], s.values[:, 1], 
+                          weights=s.get_weights(), bins=50)
         axes[1, i].hist2d(samples[:, 0], samples[:, 1], bins=50)
 
 ax = axes.flatten()
 for i in range(len(ax)):
-    #ax[i].set_xlim([0, 2])
-    #ax[i].set_ylim([0, 2])
     ax[i].set_xlabel(r'$\theta_1$')
 ax[0].set_ylabel('Truth\n' + r'$\theta_2$')
 ax[5].set_ylabel('Flow\n' + r'$\theta_2$')
@@ -95,9 +85,6 @@ plt.show()
 from margarine.maf import MAF
 
 values = ns.values[:, :ndims]
-"""mask = np.isfinite(values[:, 0]) & np.isfinite(values[:, 1])
-values = values[mask]
-weights = ns.get_weights()[mask]"""
 weights = ns.get_weights()
 
 if LOAD:
@@ -108,12 +95,6 @@ else:
         hidden_layers=HIDDEN_LAYERS)
     flow.train(5000, early_stop=True)
     flow.save(base_dir + 'normal_flow.pkl')
-
-#print(bflow.mades[0]._network.summary())
-#from tensorflow import keras
-#keras.utils.plot_model(bflow.mades[0]._network, "conditional_made.png", show_shapes=True)
-#print(flow.mades[0]._network.summary())
-#keras.utils.plot_model(flow.mades[0]._network, "normal_made.png", show_shapes=True)
 
 nflp = flow.log_prob(values).numpy()
 cnflp = bflow.log_prob(values, 1)
@@ -143,12 +124,6 @@ for i in range(2):
     axes[i].set_ylabel('Flow log-posterior')
     axes[i].legend()
        
-"""axes[2].scatter(values[:, 0], values[:, 1], c=posterior_probs, cmap='viridis_r', marker='.')
-axes[2].set_title('Samples')
-axes[2].set_xlabel(r'$\theta_1$')
-axes[2].set_ylabel(r'$\theta_2$')
-axes[0].set_title('Normal margarine')
-axes[1].set_title('beta flow')"""
 plt.tight_layout()
 plt.savefig(base_dir + 'likleihood_comparison.png', dpi=300)
 plt.show()
