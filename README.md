@@ -68,7 +68,26 @@ distribution and has many other applications.
 
 ## Citation
 
-Please cite this code base if you use Beta-flows in your work.
+Please cite this code base if you use Beta-flows in your work and the corresponding
+paper [Accelerated nested sampling with  β -flows for gravitational waves](https://ui.adsabs.harvard.edu/abs/2024arXiv241117663P/abstract).
+
+```bibtex
+@ARTICLE{2024arXiv241117663P,
+       author = {{Prathaban}, Metha and {Bevins}, Harry and {Handley}, Will},
+        title = "{Accelerated nested sampling with $\beta$-flows for gravitational waves}",
+      journal = {arXiv e-prints},
+     keywords = {Astrophysics - Instrumentation and Methods for Astrophysics, Astrophysics - High Energy Astrophysical Phenomena, General Relativity and Quantum Cosmology},
+         year = 2024,
+        month = nov,
+          eid = {arXiv:2411.17663},
+        pages = {arXiv:2411.17663},
+archivePrefix = {arXiv},
+       eprint = {2411.17663},
+ primaryClass = {astro-ph.IM},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2024arXiv241117663P},
+      adsnote = {Provided by the SAO/NASA Astrophysics Data System}
+}
+```
 
 ```bibtex
 @article{beta-flows,
